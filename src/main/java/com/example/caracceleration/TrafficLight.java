@@ -55,7 +55,6 @@ public class TrafficLight extends VBox {
         VBox trafficLightAll = new VBox();
         trafficLightAll.getChildren().addAll(trafficLightBody, trafficPillar);
         trafficLightAll.setAlignment(Pos.TOP_CENTER);
-
         this.getChildren().addAll(timerText, trafficLightAll);
     }
 

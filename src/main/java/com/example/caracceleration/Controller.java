@@ -9,13 +9,14 @@ import javafx.util.Duration;
 import java.util.List;
 
 public class Controller extends Thread implements ISubscription, IArrivalRate, IPhaseDuration {
+    enum Mode { NORMAL, SYNCHRONOUS }
+    private Mode currentMode = Mode.NORMAL;
     private volatile boolean running = true;
     private Timeline carGeneration;
     private List<Car> cars;
     private Pane roadPane;
     private int arrivalRate;
 
-    private TrafficLightApp app;
 
 
     private TrafficLight trafficLight;
@@ -30,8 +31,7 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
     private Timeline flashingYellowTimeline; // Flashing Yellow Timer
     private int passingCars;
 
-    public Controller(Pane roadPane, TrafficLightApp app, List<Car> cars, TrafficLight trafficLight) {
-        this.app = app;
+    public Controller(Pane roadPane, List<Car> cars, TrafficLight trafficLight) {
         this.cars = cars;
         this.roadPane = roadPane;
         arrivalRate = 2;
@@ -39,6 +39,15 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
         this.trafficLight = trafficLight;
 
         setPhase(0); // Set the initial position
+    }
+
+    public void setMode(Mode mode) {
+        this.currentMode = mode;
+    }
+
+    public void resetCars() {
+        cars.clear();
+        passingCars = 0;
     }
 
     @Override
@@ -109,18 +118,23 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
 
     private void startCarMovement() {
         Timeline movement = new Timeline(new KeyFrame(Duration.millis(50), event -> {
-            for (int i = 0; i < cars.size(); i++) {
-                Car car = cars.get(i);
-                Car previousCar = i > 0 ? cars.get(i - 1) : null;
-                updatePosition(car, previousCar);
+            if(currentMode == Mode.NORMAL) {
+                for (int i = 0; i < cars.size(); i++) {
+                    Car car = cars.get(i);
+                    Car previousCar = i > 0 ? cars.get(i - 1) : null;
+                    updateCarsIndividually(car, previousCar);
+                }
             }
+            else {
+                for (Car car : cars) { updateCarsSynchronously(car); }
+            }
+
             // Удаляем машины, которые проехали предел экрана (например, 1650 по X)
             cars.removeIf(car -> {
                 boolean isOutOfBounds = car.getLayoutX() > 1650;
                 if (isOutOfBounds) {
                     roadPane.getChildren().remove(car); // Удаляем машину с панели
                     passingCars++;
-                    app.updatePassingCarsLabel(); // Обновляем метку
                 }
                 return isOutOfBounds;
             });
@@ -129,7 +143,27 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
         movement.play();
     }
 
-    public void updatePosition(Car car, Car previousCar) {
+    private void updateCarsSynchronously(Car car) {
+        double targetSpeed = car.getMaxSpeed();
+        // Учитываем торможение перед светофором
+        double distanceToTrafficLight = getTrafficLight().getLayoutX() - car.getLayoutX();
+        if (!isGreen() && !isFlashingGreen()) {
+            // Начинаем замедление перед светофором, если он не зелёный
+            targetSpeed = 0;
+        }
+
+        // Регулируем скорость автомобиля
+        if (car.getSpeed() < targetSpeed) {
+            car.setSpeed(Math.min(targetSpeed, car.getSpeed() + car.getAcceleration())); // Ускорение
+        } else {
+            car.setSpeed(Math.max(0, car.getSpeed() - car.getDeceleration())); // Торможение
+        }
+
+        // Обновляем позицию машины
+        car.setLayoutX(car.getLayoutX() + car.getSpeed());
+    }
+
+    public void updateCarsIndividually(Car car, Car previousCar) {
         double distanceToPrevious = previousCar != null ? previousCar.getLayoutX() - car.getLayoutX() : Double.MAX_VALUE;
         distanceToPrevious-= 100;
         double targetSpeed = car.getMaxSpeed();
@@ -321,6 +355,20 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
     public void setPhaseDuration(int phaseIndex, int duration) {
         phaseDurations[phaseIndex] = duration;
     }
+
+    @Override
+    public void setCurrentPhaseIndex(int phaseIndex) {
+        this.currentPhaseIndex = phaseIndex;
+        timeRemaining = phaseDurations[currentPhaseIndex];
+        isRunning = false;
+        stopFlashingGreen();
+        stopFlashingYellow();
+        trafficLight.resetLights();
+        setPhase(currentPhaseIndex);
+        timeline.stop();
+
+    }
+
     public boolean isGreen() {
         return "Green".equals(phases[currentPhaseIndex]);
     }

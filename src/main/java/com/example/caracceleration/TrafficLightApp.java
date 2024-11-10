@@ -1,5 +1,7 @@
 package com.example.caracceleration;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -10,6 +12,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +24,11 @@ public class TrafficLightApp extends Application {
     private Controller controller;
     private Label passingCarsLabel;
     private CarChartWindow carChartWindow;
+    private Timeline carCounting;
+    private ToggleGroup modeToggleGroup;
+    private RadioButton normalModeButton;
+    private RadioButton synchronousModeButton;
+    private int goTime;
 
     @Override
     public void start(Stage primaryStage) {
@@ -28,7 +36,7 @@ public class TrafficLightApp extends Application {
         cars = new ArrayList<>();
 
         // Label для общего количества пройденных авто
-        passingCarsLabel = new Label("Cars passed: 0");
+        passingCarsLabel = new Label("Cars passed: 0   Time: 0");
         passingCarsLabel.setStyle("-fx-font-size: 16px; -fx-text-fill: black;");
 
         // Создание кнопок и слайдеров для управления светофором
@@ -36,19 +44,19 @@ public class TrafficLightApp extends Application {
 
         // Дорожное полотно
         roadPane = new Pane();
-        roadPane.setPrefSize(1600, 400);
+        roadPane.setPrefSize(1600, 100);
+        roadPane.setTranslateY(300);
         roadPane.setBackground(new Background(new BackgroundFill(Color.LIGHTGRAY, CornerRadii.EMPTY, Insets.EMPTY)));
-        roadPane.getChildren().addAll(trafficLight, passingCarsLabel); // Добавление светофора в правую часть дороги
+        roadPane.getChildren().addAll(trafficLight); // Добавление светофора в правую часть дороги
         trafficLight.setLayoutX(1500);  // Позиция светофора ближе к правому краю
-        trafficLight.setLayoutY(10);
-        passingCarsLabel.setLayoutX(10); // Позиция в левом верхнем углу
-        passingCarsLabel.setLayoutY(10);
+        trafficLight.setLayoutY(-300);
+        //passingCarsLabel.setLayoutX(10); // Позиция в левом верхнем углу
+        //passingCarsLabel.setLayoutY(10);
 
         // Настройка окна
         primaryStage.setOnCloseRequest(event -> { controller.stopController(); });
-
         // Основной контейнер
-        VBox root = new VBox(10, roadPane, controls);
+        VBox root = new VBox(10, passingCarsLabel, roadPane, controls);
         root.setPadding(new Insets(10));
         Scene scene = new Scene(root, 1700, 550);
         primaryStage.setTitle("Traffic Light with Cars");
@@ -57,11 +65,13 @@ public class TrafficLightApp extends Application {
         primaryStage.show();
 
 
-        controller = new Controller(roadPane,this, cars, trafficLight);
-        //carController = new CarController(roadPane, cars, trafficLightController);
+        controller = new Controller(roadPane,  cars, trafficLight);
         controller.start();
 
         carChartWindow = new CarChartWindow(controller);
+        goTime = 0;
+        updatePassingCarsLabel();
+        controller.startTL();
     }
 
     private void openConfigurationWindow() {
@@ -151,7 +161,6 @@ public class TrafficLightApp extends Application {
         Button startButton = new Button("Start Traffic Light");
         startButton.setOnAction(event -> { // The start button also updates the entered time
             if (!controller.isRunning && !controller.isPaused) { // If the traffic light is not running (turn it on)
-                System.out.println("Starting Traffic Light");
                 controller.startTL();
             } else if (controller.isPaused) { // If the traffic light is paused (resume it)
                 controller.resumeTL();
@@ -168,13 +177,55 @@ public class TrafficLightApp extends Application {
         Button chartButton = new Button("Show Car Count Chart");
         chartButton.setOnAction(event -> carChartWindow.show());
 
-        controlPanel.getChildren().addAll(startButton, stopButton, configureButton, chartButton);
+        // Радиокнопки для выбора режима
+        normalModeButton = new RadioButton("Normal Mode");
+        synchronousModeButton = new RadioButton("Synchronous Mode");
+        modeToggleGroup = new ToggleGroup();
+        normalModeButton.setToggleGroup(modeToggleGroup);
+        synchronousModeButton.setToggleGroup(modeToggleGroup);
+        normalModeButton.setSelected(true); // По умолчанию выбран обычный режим
+
+        // Обработчик переключения режимов
+        modeToggleGroup.selectedToggleProperty().addListener((obs, oldToggle, newToggle) -> switchMode());
+
+        HBox modeSelectionBox = new HBox(10, normalModeButton, synchronousModeButton);
+        modeSelectionBox.setAlignment(Pos.CENTER);
+
+        controlPanel.getChildren().addAll(startButton, stopButton, configureButton, chartButton, modeSelectionBox);
         return controlPanel;
+    }
+
+    // Метод для переключения режима
+    private void switchMode() {
+        // Очистка дороги от всех автомобилей
+        roadPane.getChildren().removeAll(cars);
+        cars.clear();
+        controller.resetCars();
+        updatePassingCarsLabel();
+        carChartWindow = new CarChartWindow(controller);
+        goTime = 0;
+        controller.setCurrentPhaseIndex(0);
+        // Переключение режима
+        if (normalModeButton.isSelected()) {
+            controller.setMode(Controller.Mode.NORMAL);
+        } else if (synchronousModeButton.isSelected()) {
+            controller.setMode(Controller.Mode.SYNCHRONOUS);
+        }
+        controller.startTL();
     }
 
     // Метод для обновления текста метки с количеством прошедших авто
     public void updatePassingCarsLabel() {
-        passingCarsLabel.setText("Cars passed: " + controller.getPassingCars()); // Обновляем метку);
+        if (carCounting != null) {
+            carCounting.stop();
+        }
+        // Таймер для обновления графика каждую секунду
+        carCounting = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
+            goTime++;
+            passingCarsLabel.setText("Cars passed: " + controller.getPassingCars() + "   Time: " + goTime); // Обновляем метку;
+        }));
+        carCounting.setCycleCount(Timeline.INDEFINITE);
+        carCounting.play();
     }
 
     public static void main(String[] args) {

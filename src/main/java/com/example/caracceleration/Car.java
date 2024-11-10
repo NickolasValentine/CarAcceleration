@@ -7,7 +7,7 @@ import javafx.scene.shape.Rectangle;
 
 class Car extends ImageView {
     private double speed = 0; // Скорость
-    private static final double MAX_SPEED = 8; // Макс. скорость
+    private static final double MAX_SPEED = 8; // Макс.скорость
     private static final double ACCELERATION = 0.1; // Ускорение
     private static final double DECELERATION = 0.3; // Замедление
     private static final double SAFE_DISTANCE = 120; // Минимальное расстояние между автомобилями
@@ -20,7 +20,7 @@ class Car extends ImageView {
         setFitWidth(100); // Устанавливаем ширину изображения
         setFitHeight(40); // Устанавливаем высоту изображения
         setLayoutX(x);
-        setLayoutY(300);
+        setLayoutY(0);
     }
 
     private static Image loadCarImage() {
