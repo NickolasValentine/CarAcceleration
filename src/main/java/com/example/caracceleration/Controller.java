@@ -6,9 +6,13 @@ import javafx.scene.layout.Pane;
 import javafx.scene.paint.Color;
 import javafx.util.Duration;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class Controller extends Thread implements ISubscription, IArrivalRate, IPhaseDuration {
+
+    public List<IObserver> observers;
+
     enum Mode { NORMAL, SYNCHRONOUS }
     private Mode currentMode = Mode.NORMAL;
     private volatile boolean running = true;
@@ -32,6 +36,9 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
     private int passingCars;
 
     public Controller(Pane roadPane, List<Car> cars, TrafficLight trafficLight) {
+
+        observers = new ArrayList<>();
+
         this.cars = cars;
         this.roadPane = roadPane;
         arrivalRate = 2;
@@ -50,22 +57,27 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
         passingCars = 0;
     }
 
-    @Override
-    public void onPhaseChange(String newPhase, int remainingTime) {
-        System.out.println("Phase changed to: " + newPhase + ", Remaining time: " + remainingTime);
-    }
-    @Override
     public int getNumberOfCars() { return cars.size(); }
 
     @Override
-    public int[] getPhaseDurations(){ return phaseDurations; }
+    public void register(IObserver observer) {
+        observers.add(observer);
+    }
 
     @Override
-    public String[] getPhases() { return phases; }
+    public void unregister(IObserver observer) {
+        observers.remove(observer);
+    }
 
     @Override
-    public int getPassingCars(){ return passingCars; }
-
+    public void notifyObserver() {
+        List<Integer> deleteMass = new ArrayList<>();
+        for (int i = 0; i < observers.size(); i++) {
+            if(observers.get(i).getSubStatus() == 1) { observers.get(i).update(passingCars, getNumberOfCars()); }
+            else if (observers.get(i).getSubStatus() == 2) { deleteMass.add(i);}
+        }
+        for (Integer mass : deleteMass) { unregister(observers.get(mass)); }
+    }
 
     ///////////////////
     // CarController //
@@ -77,16 +89,18 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
 
     @Override
     public void run() {
+        initializeTimer();
         startCarGeneration();
         startCarMovement();
-        initializeTimer();
-        while (running) {;
+        while (running) {
             try {
+                System.out.println("Observers: " + observers.size());
                 Thread.sleep(1); // Обновляем состояние каждую секунду
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
+
     }
 
     private void startCarGeneration() {
@@ -111,6 +125,7 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
 
             roadPane.getChildren().add(newCar);
             cars.add(newCar);
+            notifyObserver();
         }));
         carGeneration.setCycleCount(Timeline.INDEFINITE);
         carGeneration.play();
@@ -135,6 +150,7 @@ public class Controller extends Thread implements ISubscription, IArrivalRate, I
                 if (isOutOfBounds) {
                     roadPane.getChildren().remove(car); // Удаляем машину с панели
                     passingCars++;
+                    notifyObserver();
                 }
                 return isOutOfBounds;
             });

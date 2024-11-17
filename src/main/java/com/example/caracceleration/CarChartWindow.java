@@ -7,24 +7,33 @@ import javafx.scene.Scene;
 import javafx.scene.chart.LineChart;
 import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
+import javafx.scene.control.Button;
 import javafx.scene.image.Image;
+import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-public class CarChartWindow {
+public class CarChartWindow implements IObserver {
     private final Stage stage;
     private final XYChart.Series<Number, Number> carSeries;
     private final List<Integer> carCountHistory;
-    private int timeInSeconds = 0;
-    private Controller controller;
-    private Timeline carCoutnUpdateTimeline;
+    private int timeInSeconds;
+    private Timeline carCountUpdateTimeline;
+    private int numberOfCars;
 
-    public CarChartWindow(Controller controller) {
+    private short subStatus;
+
+    public CarChartWindow(int timeInSeconds) {
+        subStatus = 1;
         stage = new Stage();
+        this.timeInSeconds = timeInSeconds;
         carCountHistory = new ArrayList<>();
-        this.controller = controller;
+
+        stage.setOnCloseRequest(event -> {
+            subStatus = 2;
+        });
 
         // Оси графика
         NumberAxis xAxis = new NumberAxis();
@@ -41,10 +50,28 @@ public class CarChartWindow {
         carSeries.setName("Number of Cars");
         lineChart.getData().add(carSeries);
 
+        // Кнопка "Подписаться/Отписаться"
+        Button subscribeButton = new Button("Отписаться");
+        subscribeButton.setOnAction(event -> {
+            if (subStatus == 1) {
+                subStatus = 0;
+                subscribeButton.setText("Подписаться");
+            } else {
+                subStatus = 1;
+                subscribeButton.setText("Отписаться");
+            }
+        });
+
+        // Макет окна
+        BorderPane root = new BorderPane();
+        root.setCenter(lineChart);
+        root.setBottom(subscribeButton);
+        BorderPane.setMargin(subscribeButton, new javafx.geometry.Insets(10));
+
         startChartUpdate();
 
         // Настройка сцены
-        Scene scene = new Scene(lineChart, 600, 400);
+        Scene scene = new Scene(root, 600, 400);
         stage.setScene(scene);
         stage.setTitle("Car Count Chart");
         stage.getIcons().add(new Image(getClass().getResourceAsStream("icons/graphicon.png")));
@@ -52,6 +79,10 @@ public class CarChartWindow {
 
     public void show() {
         stage.show();
+    }
+
+    public void close() {
+        stage.close();
     }
 
     public void addDataPoint(int carCount) {
@@ -62,16 +93,26 @@ public class CarChartWindow {
     }
 
     private void startChartUpdate() {
-        if (carCoutnUpdateTimeline != null) {
-            carCoutnUpdateTimeline.stop();
+        if (carCountUpdateTimeline != null) {
+            carCountUpdateTimeline.stop();
         }
 
         // Таймер для обновления графика каждую секунду
-        carCoutnUpdateTimeline = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
-            int carCount = controller.getNumberOfCars();
+        carCountUpdateTimeline = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
+            int carCount = numberOfCars;
             addDataPoint(carCount);
         }));
-        carCoutnUpdateTimeline.setCycleCount(Timeline.INDEFINITE);
-        carCoutnUpdateTimeline.play();
+        carCountUpdateTimeline.setCycleCount(Timeline.INDEFINITE);
+        carCountUpdateTimeline.play();
+    }
+
+    @Override
+    public short getSubStatus() {
+        return subStatus;
+    }
+
+    @Override
+    public void update(int passingCars, int numberOfCars) {
+        this.numberOfCars = numberOfCars;
     }
 }

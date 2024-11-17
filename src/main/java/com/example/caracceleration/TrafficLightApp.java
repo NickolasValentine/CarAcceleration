@@ -17,18 +17,20 @@ import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TrafficLightApp extends Application {
+public class TrafficLightApp extends Application implements IObserver {
     private List<Car> cars;
     private Pane roadPane;
     private TrafficLight trafficLight;
     private Controller controller;
     private Label passingCarsLabel;
-    private CarChartWindow carChartWindow;
     private Timeline carCounting;
     private ToggleGroup modeToggleGroup;
     private RadioButton normalModeButton;
     private RadioButton synchronousModeButton;
     private int goTime;
+    private int passingCars;
+
+    public short subStatus;
 
     @Override
     public void start(Stage primaryStage) {
@@ -65,13 +67,21 @@ public class TrafficLightApp extends Application {
         primaryStage.show();
 
 
-        controller = new Controller(roadPane,  cars, trafficLight);
+        controller = new Controller(roadPane, cars, trafficLight);
         controller.start();
-
-        carChartWindow = new CarChartWindow(controller);
         goTime = 0;
+        subStatus = 1;
+        controller.register(this);// Подписка
         updatePassingCarsLabel();
         controller.startTL();
+    }
+
+    @Override
+    public short getSubStatus() { return subStatus; }
+
+    @Override
+    public void update(int passingCars, int numberOfCars) {
+        this.passingCars = passingCars;
     }
 
     private void openConfigurationWindow() {
@@ -175,7 +185,11 @@ public class TrafficLightApp extends Application {
 
         // Создаем кнопку для открытия окна графика
         Button chartButton = new Button("Show Car Count Chart");
-        chartButton.setOnAction(event -> carChartWindow.show());
+        chartButton.setOnAction(event -> {
+            CarChartWindow cCW = new CarChartWindow(goTime);
+            controller.register(cCW);
+            cCW.show();
+        });
 
         // Радиокнопки для выбора режима
         normalModeButton = new RadioButton("Normal Mode");
@@ -202,7 +216,6 @@ public class TrafficLightApp extends Application {
         cars.clear();
         controller.resetCars();
         updatePassingCarsLabel();
-        carChartWindow = new CarChartWindow(controller);
         goTime = 0;
         controller.setCurrentPhaseIndex(0);
         // Переключение режима
@@ -222,7 +235,7 @@ public class TrafficLightApp extends Application {
         // Таймер для обновления графика каждую секунду
         carCounting = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
             goTime++;
-            passingCarsLabel.setText("Cars passed: " + controller.getPassingCars() + "   Time: " + goTime); // Обновляем метку;
+            passingCarsLabel.setText("Cars passed: " + passingCars + "   Time: " + goTime); // Обновляем метку;
         }));
         carCounting.setCycleCount(Timeline.INDEFINITE);
         carCounting.play();
